@@ -3,9 +3,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiFetch } from "@/lib/client";
-import { PostDTO, Visibility } from "@/lib/types";
+import { PostDTO, UserDTO, Visibility } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import { feedKey, useUpdatePost } from "@/hooks/useFeed";
+import { useMe } from "./me-context";
 import { Avatar } from "./Avatar";
 import { LikersModal } from "./LikersModal";
 import { CommentSection } from "./CommentSection";
@@ -14,6 +15,7 @@ import { ConfirmModal } from "./ConfirmModal";
 export function PostCard({ post }: { post: PostDTO }) {
   const queryClient = useQueryClient();
   const updatePost = useUpdatePost();
+  const me = useMe();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [likersOpen, setLikersOpen] = useState(false);
@@ -27,22 +29,37 @@ export function PostCard({ post }: { post: PostDTO }) {
 
   const like = useMutation({
     mutationFn: () =>
-      apiFetch<{ liked: boolean; likeCount: number }>(`/api/posts/${post.id}/like`, { method: "POST" }),
+      apiFetch<{ liked: boolean; likeCount: number; likePreview: UserDTO[] }>(`/api/posts/${post.id}/like`, {
+        method: "POST",
+      }),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: feedKey });
-      const snapshot = { likedByMe: post.likedByMe, likeCount: post.likeCount };
-      updatePost(post.id, (p) => ({
-        ...p,
-        likedByMe: !p.likedByMe,
-        likeCount: p.likeCount + (p.likedByMe ? -1 : 1),
-      }));
+      const snapshot = {
+        likedByMe: post.likedByMe,
+        likeCount: post.likeCount,
+        likePreview: post.likePreview,
+      };
+      updatePost(post.id, (p) => {
+        const others = p.likePreview.filter((u) => u.id !== me.id);
+        return {
+          ...p,
+          likedByMe: !p.likedByMe,
+          likeCount: p.likeCount + (p.likedByMe ? -1 : 1),
+          likePreview: p.likedByMe ? others : [me, ...others].slice(0, 5),
+        };
+      });
       return snapshot;
     },
     onError: (_err, _vars, snapshot) => {
       if (snapshot) updatePost(post.id, (p) => ({ ...p, ...snapshot }));
     },
     onSuccess: (res) => {
-      updatePost(post.id, (p) => ({ ...p, likedByMe: res.liked, likeCount: res.likeCount }));
+      updatePost(post.id, (p) => ({
+        ...p,
+        likedByMe: res.liked,
+        likeCount: res.likeCount,
+        likePreview: res.likePreview,
+      }));
     },
   });
 

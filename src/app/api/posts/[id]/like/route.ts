@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authorSelect, serializeUser } from "@/lib/serializers";
 import { error, requireUserId } from "@/lib/http";
 
 type Context = { params: Promise<{ id: string }> };
@@ -20,20 +21,28 @@ export async function POST(_req: NextRequest, { params }: Context) {
   const result = await prisma.$transaction(async (tx) => {
     if (existing) {
       await tx.postLike.delete({ where: { id: existing.id } });
-      const p = await tx.post.update({
-        where: { id },
-        data: { likeCount: { decrement: 1 } },
-        select: { likeCount: true },
-      });
-      return { liked: false, likeCount: p.likeCount };
+    } else {
+      await tx.postLike.create({ data: { postId: id, userId: meId } });
     }
-    await tx.postLike.create({ data: { postId: id, userId: meId } });
+
     const p = await tx.post.update({
       where: { id },
-      data: { likeCount: { increment: 1 } },
+      data: { likeCount: existing ? { decrement: 1 } : { increment: 1 } },
       select: { likeCount: true },
     });
-    return { liked: true, likeCount: p.likeCount };
+
+    const preview = await tx.postLike.findMany({
+      where: { postId: id },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { user: { select: authorSelect } },
+    });
+
+    return {
+      liked: !existing,
+      likeCount: p.likeCount,
+      likePreview: preview.map((l) => serializeUser(l.user)),
+    };
   });
 
   return NextResponse.json(result);
