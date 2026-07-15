@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { PostDTO, UserDTO, Visibility } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
@@ -25,14 +25,24 @@ export function PostCard({ post }: { post: PostDTO }) {
   const [editValue, setEditValue] = useState(post.content);
   const [editVisibility, setEditVisibility] = useState<Visibility>(post.visibility);
 
+  const likeIntent = useRef(0);
+  const likeChain = useRef<Promise<unknown>>(Promise.resolve());
+
   const authorName = `${post.author.firstName} ${post.author.lastName}`;
 
   const like = useMutation({
-    mutationFn: () =>
-      apiFetch<{ liked: boolean; likeCount: number; likePreview: UserDTO[] }>(`/api/posts/${post.id}/like`, {
-        method: "POST",
-      }),
-    onMutate: async () => {
+    mutationFn: (liked: boolean) => {
+      const run = likeChain.current.catch(() => {}).then(() =>
+        apiFetch<{ liked: boolean; likeCount: number; likePreview: UserDTO[] }>(
+          `/api/posts/${post.id}/like`,
+          { method: liked ? "PUT" : "DELETE" },
+        ),
+      );
+      likeChain.current = run;
+      return run;
+    },
+    onMutate: async (liked) => {
+      const version = ++likeIntent.current;
       await queryClient.cancelQueries({ queryKey: feedKey });
       const snapshot = {
         likedByMe: post.likedByMe,
@@ -43,17 +53,19 @@ export function PostCard({ post }: { post: PostDTO }) {
         const others = p.likePreview.filter((u) => u.id !== me.id);
         return {
           ...p,
-          likedByMe: !p.likedByMe,
-          likeCount: p.likeCount + (p.likedByMe ? -1 : 1),
-          likePreview: p.likedByMe ? others : [me, ...others].slice(0, 5),
+          likedByMe: liked,
+          likeCount: p.likeCount + (liked === p.likedByMe ? 0 : liked ? 1 : -1),
+          likePreview: liked ? [me, ...others].slice(0, 5) : others,
         };
       });
-      return snapshot;
+      return { version, snapshot };
     },
-    onError: (_err, _vars, snapshot) => {
-      if (snapshot) updatePost(post.id, (p) => ({ ...p, ...snapshot }));
+    onError: (_err, _liked, ctx) => {
+      if (!ctx || ctx.version !== likeIntent.current) return;
+      updatePost(post.id, (p) => ({ ...p, ...ctx.snapshot }));
     },
-    onSuccess: (res) => {
+    onSuccess: (res, _liked, ctx) => {
+      if (!ctx || ctx.version !== likeIntent.current) return;
       updatePost(post.id, (p) => ({
         ...p,
         likedByMe: res.liked,
@@ -268,8 +280,7 @@ export function PostCard({ post }: { post: PostDTO }) {
       <div className="_feed_inner_timeline_reaction">
         <button
           className={`_feed_inner_timeline_reaction_emoji _feed_reaction ${post.likedByMe ? "_feed_reaction_active" : ""}`}
-          onClick={() => like.mutate()}
-          disabled={like.isPending}
+          onClick={() => like.mutate(!post.likedByMe)}
         >
           <span className="_feed_inner_timeline_reaction_link">
             <span>

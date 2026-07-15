@@ -4,42 +4,45 @@ import { error, requireUserId } from "@/lib/http";
 
 type Context = { params: Promise<{ id: string }> };
 
-export async function POST(_req: NextRequest, { params }: Context) {
-  const meId = await requireUserId();
-  if (!meId) return error(401, "Unauthorized");
-  const { id } = await params;
-
+async function setLike(id: string, meId: string, liked: boolean) {
   const comment = await prisma.comment.findUnique({
     where: { id },
     select: { post: { select: { authorId: true, visibility: true } } },
   });
   if (!comment || (comment.post.visibility === "PRIVATE" && comment.post.authorId !== meId)) {
-    return error(404, "Comment not found");
+    return null;
   }
 
-  const existing = await prisma.commentLike.findUnique({
-    where: { commentId_userId: { commentId: id, userId: meId } },
-    select: { id: true },
-  });
+  const [, counted] = await prisma.$transaction([
+    liked
+      ? prisma.commentLike.createMany({ data: { commentId: id, userId: meId }, skipDuplicates: true })
+      : prisma.commentLike.deleteMany({ where: { commentId: id, userId: meId } }),
+    prisma.$queryRaw<{ likeCount: number }[]>`
+      UPDATE "Comment"
+      SET "likeCount" = (SELECT count(*)::int FROM "CommentLike" WHERE "commentId" = ${id})
+      WHERE "id" = ${id}
+      RETURNING "likeCount"`,
+  ]);
 
-  const result = await prisma.$transaction(async (tx) => {
-    if (existing) {
-      await tx.commentLike.delete({ where: { id: existing.id } });
-      const c = await tx.comment.update({
-        where: { id },
-        data: { likeCount: { decrement: 1 } },
-        select: { likeCount: true },
-      });
-      return { liked: false, likeCount: c.likeCount };
-    }
-    await tx.commentLike.create({ data: { commentId: id, userId: meId } });
-    const c = await tx.comment.update({
-      where: { id },
-      data: { likeCount: { increment: 1 } },
-      select: { likeCount: true },
-    });
-    return { liked: true, likeCount: c.likeCount };
-  });
+  return { liked, likeCount: counted[0].likeCount };
+}
 
+export async function PUT(_req: NextRequest, { params }: Context) {
+  const meId = await requireUserId();
+  if (!meId) return error(401, "Unauthorized");
+  const { id } = await params;
+
+  const result = await setLike(id, meId, true);
+  if (!result) return error(404, "Comment not found");
+  return NextResponse.json(result);
+}
+
+export async function DELETE(_req: NextRequest, { params }: Context) {
+  const meId = await requireUserId();
+  if (!meId) return error(401, "Unauthorized");
+  const { id } = await params;
+
+  const result = await setLike(id, meId, false);
+  if (!result) return error(404, "Comment not found");
   return NextResponse.json(result);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { CommentDTO } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
@@ -26,8 +26,10 @@ export function CommentItem({ comment, postId, isReply = false, bumpPostComments
   const [content, setContent] = useState(comment.content);
   const [liked, setLiked] = useState(comment.likedByMe);
   const [likeCount, setLikeCount] = useState(comment.likeCount);
-  const [likeBusy, setLikeBusy] = useState(false);
   const [replyCount, setReplyCount] = useState(comment.replyCount);
+
+  const likeIntent = useRef(0);
+  const likeChain = useRef<Promise<unknown>>(Promise.resolve());
 
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(comment.content);
@@ -42,22 +44,28 @@ export function CommentItem({ comment, postId, isReply = false, bumpPostComments
   const replyItems = replies.data?.pages.flatMap((p) => p.items) ?? [];
 
   async function toggleLike() {
-    if (likeBusy) return;
-    setLikeBusy(true);
     const next = !liked;
+    const version = ++likeIntent.current;
+    const snapshot = { liked, likeCount };
     setLiked(next);
     setLikeCount((c) => c + (next ? 1 : -1));
+
+    const run = likeChain.current.catch(() => {}).then(() =>
+      apiFetch<{ liked: boolean; likeCount: number }>(`/api/comments/${comment.id}/like`, {
+        method: next ? "PUT" : "DELETE",
+      }),
+    );
+    likeChain.current = run;
+
     try {
-      const res = await apiFetch<{ liked: boolean; likeCount: number }>(`/api/comments/${comment.id}/like`, {
-        method: "POST",
-      });
+      const res = await run;
+      if (version !== likeIntent.current) return;
       setLiked(res.liked);
       setLikeCount(res.likeCount);
     } catch {
-      setLiked(!next);
-      setLikeCount((c) => c + (next ? -1 : 1));
-    } finally {
-      setLikeBusy(false);
+      if (version !== likeIntent.current) return;
+      setLiked(snapshot.liked);
+      setLikeCount(snapshot.likeCount);
     }
   }
 
