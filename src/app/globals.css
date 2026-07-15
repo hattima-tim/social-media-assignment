@@ -28,20 +28,17 @@ html.app-dark body {
   margin-top: 4px;
 }
 
-.app-avatar {
-  object-fit: cover;
+/* Element-qualified to outrank the template's per-slot avatar classes (_comment_img and
+   friends), which clamp max-width to the size the original markup happened to use. Avatar
+   sizes itself from its size prop, so those clamps only squash it off-circle. */
+img.app-avatar,
+svg.app-avatar {
+  max-width: none;
+  flex-shrink: 0;
 }
 
-.app-avatar-fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #377dff;
-  color: #fff;
-  border-radius: 50%;
-  font-weight: 600;
-  text-transform: uppercase;
-  flex-shrink: 0;
+img.app-avatar {
+  object-fit: cover;
 }
 
 .app-spinner {
@@ -107,6 +104,60 @@ html.app-dark body {
   padding: 8px 0;
 }
 
+.app-confirm {
+  max-width: 380px;
+}
+
+.app-confirm-msg {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #4a5568;
+}
+
+.app-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.app-confirm-actions button {
+  padding: 9px 18px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.2s all ease;
+}
+
+.app-confirm-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.app-btn-ghost {
+  border: 1px solid #e5e9f2;
+  background: #fff;
+  color: #4a5568;
+}
+
+.app-btn-ghost:hover:not(:disabled) {
+  background: #f6f8fb;
+}
+
+.app-btn-danger {
+  border: 1px solid #e03131;
+  background: #e03131;
+  color: #fff;
+}
+
+.app-btn-danger:hover:not(:disabled) {
+  background: #c92a2a;
+  border-color: #c92a2a;
+}
+
 .app-image-preview {
   position: relative;
   margin-top: 12px;
@@ -132,6 +183,7 @@ html.app-dark body {
   cursor: pointer;
 }
 
+/* Inline visibility select in the post edit form. */
 .app-visibility {
   border: 1px solid #e5e9f2;
   border-radius: 8px;
@@ -139,6 +191,139 @@ html.app-dark body {
   font-size: 13px;
   color: #4a5568;
   background: #fff;
+}
+
+/* Rides in the composer row beside the textarea: the action strip below is sized to the
+   pixel for its own four actions plus Post, and the textarea is invisible and far wider
+   than it needs, so the free space is here. Shrinking the textarea costs nothing visible. */
+.app-audience {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin: 5px 0 0 8px;
+  padding: 5px 9px;
+  border: 1px solid rgba(24, 144, 255, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.2s all ease;
+}
+
+.app-audience:hover {
+  border-color: var(--color5);
+}
+
+.app-audience-icon {
+  display: flex;
+  margin: 0 6px 0 0;
+}
+
+.app-audience-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-audience-icon svg circle,
+.app-audience-icon svg path,
+.app-audience-icon svg rect {
+  transition: 0.2s all ease;
+}
+
+.app-audience:hover svg circle,
+.app-audience:hover svg path,
+.app-audience:hover svg rect {
+  stroke: var(--color5);
+}
+
+.app-audience:hover svg circle[fill] {
+  fill: var(--color5);
+}
+
+.app-audience-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath stroke='%23666' stroke-width='1.4' d='M1 1l4 4 4-4'/%3E%3C/svg%3E") no-repeat right center;
+  padding: 0 14px 0 0;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--color7);
+  cursor: pointer;
+  transition: 0.2s all ease;
+}
+
+.app-audience:hover .app-audience-select {
+  color: var(--color5);
+}
+
+.app-audience-select option {
+  color: #333;
+  background: #fff;
+}
+
+/* Below 575px the labelled chip squeezes the textarea until its placeholder wraps, so it
+   hands off to a copy in the mobile action bar alongside Post. That bar is all bare icons
+   and has ~90px to spare, so the globe or lock carries the state on its own and the select
+   sits invisible over it as the tap target. */
+.app-audience-bar {
+  display: none;
+  position: relative;
+  padding: 6px;
+  margin: 0;
+}
+
+.app-audience-bar .app-audience-icon {
+  margin: 0;
+}
+
+.app-audience-bar .app-audience-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  opacity: 0;
+  background-image: none;
+}
+
+@media only screen and (max-width: 575px) {
+  .app-audience-inline {
+    display: none;
+  }
+
+  .app-audience-bar {
+    display: flex;
+  }
+}
+
+/* The template only fades the floating label on :focus, so blurring a composer that has
+   text brings the label back on top of it. Fade it whenever the field is non-empty. */
+._feed_inner_text_area_box_form > ._textarea:not(:placeholder-shown) ~ ._feed_textarea_label {
+  opacity: 0;
+}
+
+/* The composer bar is a flex row: a <button> shrinks below its content, so the wider
+   "Posting..." label would spill past the padding. Hold the idle width for both labels. */
+._feed_inner_text_area_bottom ._feed_inner_text_area_btn_link {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 140px;
+}
+
+._feed_inner_text_area_btn_link:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Outranks the ._dark_wrapper fill so the send icon reads as the live action in both
+   themes, and greys back out when there is nothing to send. */
+._feed_inner_comment_box_icon_btn.app-send:not(:disabled) svg path {
+  fill: #377dff;
+  fill-opacity: 1;
+}
+
+._feed_inner_comment_box_icon_btn:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .app-reply {
@@ -174,7 +359,59 @@ html.app-dark body {
   bottom: -14px;
 }
 
+/* The template ships the badge as a plain div, so it carries the pointer cursor while
+   nothing in it listens for a click. The badge is a real button here; the div never had
+   to fight the UA button border and font. */
+._comment_area button._total_reactions {
+  border: 0;
+  font: inherit;
+  color: inherit;
+}
+
+._comment_area ._total_reactions ._total_react {
+  display: flex;
+}
+
 ._comment_area ._comment_reply_num {
   width: max-content;
+  white-space: nowrap;
+}
+
+._comment_area ._comment_reply_list {
+  gap: 12px;
+}
+
+._comment_area ._comment_reply_list li {
+  margin: 0;
+}
+
+/* The template spaces the reaction icons off a class its own markup never used, so the
+   icons butt against their labels. Space and center them from the row instead. */
+._feed_inner_timeline_reaction ._feed_inner_timeline_reaction_link > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+._feed_inner_timeline_reaction ._feed_reaction {
+  cursor: pointer;
+}
+
+._feed_inner_timeline_reaction ._feed_reaction:last-child {
+  margin-right: 0;
+}
+
+/* The template fakes the full-width submit button with 116px of side padding instead of
+   a width, so the button shrink-wraps its column and leaves the label ~90px to sit in.
+   Anything longer than the template's own "Login now" wraps mid-phrase. Give it a real
+   width and keep the label on one line. The padding needs !important to beat the
+   template's own !important override below 1199px. */
+._social_login_form_btn_link._btn1,
+._social_registration_form_btn_link._btn1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px 24px !important;
   white-space: nowrap;
 }
